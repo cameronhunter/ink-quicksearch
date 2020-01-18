@@ -7,6 +7,8 @@ export type Props = {
     children: React.ReactNode;
 };
 
-export default function Item({ isSelected, children }: Props) {
+function Item({ isSelected, children }: Props) {
     return <Color hex={isSelected ? '#00FF00' : ''}>{children}</Color>;
 }
+
+export default React.memo(Item);

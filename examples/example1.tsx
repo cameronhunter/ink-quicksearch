@@ -29,4 +29,4 @@ function Example1() {
     );
 }
 
-render(<Example1 />);
+render(<Example1 />, { debug: true });

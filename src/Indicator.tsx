@@ -5,6 +5,8 @@ export type Props = {
     isSelected: boolean;
 };
 
-export default function Indicator({ isSelected }: Props) {
+function Indicator({ isSelected }: Props) {
     return <Color hex='#00FF00'>{isSelected ? '>' : ' '} </Color>;
 }
+
+export default React.memo(Indicator);
