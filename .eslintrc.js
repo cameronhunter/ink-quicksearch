@@ -3,7 +3,7 @@ module.exports = {
         es6: true,
         node: true
     },
-    extends: ['eslint:recommended', 'plugin:react/recommended'],
+    extends: ['eslint:recommended', 'plugin:react/recommended', 'plugin:jest/recommended'],
     parser: '@typescript-eslint/parser',
     parserOptions: {
         ecmaFeatures: {
@@ -12,7 +12,7 @@ module.exports = {
         },
         sourceType: 'module'
     },
-    plugins: ['react'],
+    plugins: ['react', 'jest'],
     rules: {
         indent: ['error', 4],
         'linebreak-style': ['error', 'unix'],
