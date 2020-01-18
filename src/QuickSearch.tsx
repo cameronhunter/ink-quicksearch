@@ -1,33 +1,74 @@
-const {h, Component, Color} = require('ink');
-const hasAnsi = require('has-ansi');
-const isEqual = require('lodash.isequal');
+import React from 'react';
+import hasAnsi from 'has-ansi';
+import isEqual from 'lodash.isequal';
+import IndicatorComponent, { Props as IndicatorProps } from './Indicator';
+import ItemComponent, { Props as ItemProps } from './Item';
+import HighlightComponent, { Props as HighlightProps } from './Highlight';
+import StatusComponent, { Props as StatusProps } from './Status';
+import { ReadStream } from 'tty';
 
-const defaultValue = {label:''}; // Used as return for empty array
+const defaultValue = { label: '' }; // Used as return for empty array
 
+export { IndicatorProps, ItemProps, HighlightProps, StatusProps };
 
-// For the following four, whitespace is important
-const IndicatorComponent = ({isSelected}) => {
-    return <Color hex="#00FF00">{isSelected ? '>' : ' '} </Color>;
+export type Item = {
+    label: string;
+    value?: React.Key;
 };
 
-const ItemComponent = ({isSelected, children}) => (
-    <Color hex={isSelected ? '#00FF00' : ''}>{children}</Color>
-);
+export type Props = {
+    items: Item[];
+    onSelect: (item: Item) => void;
+    focus: boolean;
+    limit: number;
+    forceMatchingQuery: boolean;
+    clearQueryChars: string[];
+    initialSelectionIndex: number;
+    indicatorComponent: React.ComponentType<IndicatorProps>;
+    itemComponent: React.ComponentType<ItemProps>;
+    highlightComponent: React.ComponentType<HighlightProps>;
+    statusComponent: React.ComponentType<StatusProps>;
+    caseSensitive: boolean;
+    stdin: ReadStream;
+};
 
-const HighlightComponent = ({children}) => (
-    <Color bgHex="#6C71C4">{children}</Color>
-);
+type State = {
+    query: string;
+    hasMatch: boolean;
+    selectionIndex: number;
+    startIndex: number;
+};
 
-const StatusComponent = ({hasMatch, children}) => (
-    <Color hex={hasMatch ? '#00FF00' : '#FF0000'}>{children}</Color>
-);
+const initialState: State = {
+    query: '',
+    hasMatch: true,
+    selectionIndex: 0,
+    startIndex: 0
+};
 
+class QuickSearch extends React.Component<Props, State> {
+    public static defaultProps: Props = {
+        items: [],
+        onSelect: () => {}, // no-op
+        focus: true,
+        caseSensitive: false,
+        limit: 0,
+        forceMatchingQuery: false,
+        clearQueryChars: [
+            '\u0015', // Ctrl + U
+            '\u0017' // Ctrl + W
+        ],
+        initialSelectionIndex: 0,
+        indicatorComponent: IndicatorComponent,
+        itemComponent: ItemComponent,
+        highlightComponent: HighlightComponent,
+        statusComponent: StatusComponent,
+        stdin: process.stdin
+    };
 
-class QuickSearch extends Component {
-    constructor(props) {
+    constructor(props: Props) {
         super(props);
-        this.state = QuickSearch.initialState;
-        this.state.selectionIndex = this.props.initialSelectionIndex;
+        this.state = { ...initialState, selectionIndex: props.initialSelectionIndex };
         this.handleKeyPress = this.handleKeyPress.bind(this);
     }
 
@@ -46,16 +87,18 @@ class QuickSearch extends Component {
         const items = this.props.items.slice(begin, end);
 
         const rows = items.map((item, index) => {
-            const isLast = (index === items.length - 1);
-            const isSelected = (index + this.state.startIndex === this.state.selectionIndex);
-            const isHighlighted = undefined;
+            const isLast: boolean = index === items.length - 1;
 
-            const itemProps = {isSelected, isHighlighted, item};
+            const itemProps: { isSelected: boolean; isHighlighted: boolean; item: Item } = {
+                isSelected: index + this.state.startIndex === this.state.selectionIndex,
+                isHighlighted: false,
+                item
+            };
 
             const label = item.label;
             const queryPosition = this.getMatchPosition(label, this.state.query);
 
-            let labelComponent = '';
+            let labelComponent;
             if (queryPosition === -1) {
                 itemProps.isHighlighted = false;
                 labelComponent = <span>{label}</span>;
@@ -68,53 +111,59 @@ class QuickSearch extends Component {
                 const second = label.slice(start, end);
                 const third = label.slice(end);
 
-                labelComponent = <span>
-                    {first}
-                    <HighlightComponent_ {...itemProps}>{second}</HighlightComponent_>
-                    {third}
-                </span>;
+                labelComponent = (
+                    <span>
+                        {first}
+                        <HighlightComponent_ {...itemProps}>{second}</HighlightComponent_>
+                        {third}
+                    </span>
+                );
             }
 
-            return <ItemComponent_ key={item.value} {...itemProps}>
-                <IndicatorComponent_ {...itemProps}/>
-                {labelComponent}
-                {!isLast && <br/>}
-            </ItemComponent_>;
+            return (
+                <ItemComponent_ key={item.value ?? item.label} {...itemProps}>
+                    <IndicatorComponent_ {...itemProps} />
+                    {labelComponent}
+                    {!isLast && <br />}
+                </ItemComponent_>
+            );
         });
 
-        return <span>
-            {rows}
-            <StatusComponent_ hasMatch={this.state.hasMatch}>
-                <br/>
-                {this.state.query}
-            </StatusComponent_>
-        </span>;
+        return (
+            <span>
+                {rows}
+                <StatusComponent_ hasMatch={this.state.hasMatch}>
+                    <br />
+                    {this.state.query}
+                </StatusComponent_>
+            </span>
+        );
     }
 
     componentDidMount() {
-        process.stdin.on('keypress', this.handleKeyPress);
+        this.props.stdin.on('keypress', this.handleKeyPress);
     }
 
     componentWillUnmount() {
-        process.stdin.removeListener('keypress', this.handleKeyPress);
+        this.props.stdin.removeListener('keypress', this.handleKeyPress);
     }
 
-    componentWillReceiveProps(nextProps) {
+    UNSAFE_componentWillReceiveProps(nextProps: Props) {
         if (!isEqual(this.props.items, nextProps.items)) {
-            this.setState(QuickSearch.initialState);
+            this.setState(initialState);
             if (nextProps.initialSelectionIndex != null) {
                 this._updateSelectionIndex(nextProps.initialSelectionIndex, nextProps);
             }
         }
     }
 
-    handleKeyPress(ch, key) {
+    handleKeyPress(ch: string, key: { name: string; shift: boolean; sequence: string }) {
         if (!this.props.focus) {
             return;
         }
 
         if (this.props.clearQueryChars.indexOf(ch) !== -1) {
-            this.setState({query: ''});
+            this.setState({ query: '' });
         } else if (key.name === 'return') {
             this.props.onSelect(this.getValue());
         } else if (key.name === 'backspace') {
@@ -138,7 +187,7 @@ class QuickSearch extends Component {
         }
     }
 
-    _updateQuery(query) {
+    private _updateQuery(query: string) {
         let selectionIndex = this.state.selectionIndex;
         let hasMatch = false;
         if (query.trim() === '' || this.getMatchPosition(this.getValue().label, query) !== -1) {
@@ -158,10 +207,10 @@ class QuickSearch extends Component {
         }
 
         this._updateSelectionIndex(selectionIndex);
-        this.setState({query, hasMatch});
+        this.setState({ query, hasMatch });
     }
 
-    _changeSelection(delta) {
+    private _changeSelection(delta: number) {
         for (
             let selectionIndex = this.state.selectionIndex + delta;
             0 <= selectionIndex && selectionIndex < this.props.items.length;
@@ -179,11 +228,11 @@ class QuickSearch extends Component {
         }
     }
 
-    _updateSelectionIndex(selectionIndex, props) {
+    private _updateSelectionIndex(selectionIndex: number, props?: Props) {
         if (props == undefined) {
             props = this.props;
         }
-        this.setState({selectionIndex});
+        this.setState({ selectionIndex });
         if (props.limit === 0) {
             return;
         }
@@ -196,13 +245,14 @@ class QuickSearch extends Component {
                 throw Error(`Error: selection index (${selectionIndex}) outside items range (${props.items.length}).`);
             }
             const startIndex = selectionIndex - props.limit + 1;
-            this.setState({startIndex});
-        } else { // if (selectionIndex < begin)
-            this.setState({startIndex: selectionIndex});
+            this.setState({ startIndex });
+        } else {
+            // if (selectionIndex < begin)
+            this.setState({ startIndex: selectionIndex });
         }
     }
 
-    _handlePageChange(keyName) {
+    private _handlePageChange(keyName: 'pageup' | 'pagedown') {
         if (this.state.query.trim() !== '') {
             return; // Do not page when selecting
         }
@@ -218,7 +268,7 @@ class QuickSearch extends Component {
         this._changeSelection(newIndex - this.state.selectionIndex);
     }
 
-    getMatchPosition(label, query) {
+    getMatchPosition(label: string, query: string) {
         if (this.props.caseSensitive) {
             return label.indexOf(query);
         } else {
@@ -231,29 +281,4 @@ class QuickSearch extends Component {
     }
 }
 
-QuickSearch.initialState = {
-    query: '',
-    hasMatch: true,
-    selectionIndex: 0,
-    startIndex: 0,
-};
-
-QuickSearch.defaultProps = {
-    items: [],
-    onSelect: () => {}, // no-op
-    focus: true,
-    caseSensitive: false,
-    limit: 0,
-    forceMatchingQuery: false,
-    clearQueryChars: [
-        '\u0015', // Ctrl + U
-        '\u0017', // Ctrl + W
-    ],
-    initialSelectionIndex: 0,
-    indicatorComponent: IndicatorComponent,
-    itemComponent: ItemComponent,
-    highlightComponent: HighlightComponent,
-    statusComponent: StatusComponent,
-};
-
-module.exports = QuickSearch;
+export default QuickSearch;

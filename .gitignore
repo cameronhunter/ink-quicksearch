@@ -19,3 +19,6 @@ npm-debug.log
 
 # Extras
 temp/
+
+# Build output
+/dist
