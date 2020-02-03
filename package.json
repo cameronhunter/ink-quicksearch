@@ -48,6 +48,7 @@
     "typescript": "^3.7.3"
   },
   "peerDependencies": {
-    "ink": "2.6.x"
+    "ink": "2.6.x",
+    "react": ">=16.8.0"
   }
 }
